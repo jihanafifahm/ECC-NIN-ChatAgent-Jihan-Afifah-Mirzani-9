@@ -1,0 +1,223 @@
+{
+  "name": "my workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "=https://www.kompas.com",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "a1cba70c-5683-4d35-82cb-17f0aa2a19f9",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "judul_populer",
+              "cssSelector": "h2.mostTitle, div.spotlightItem h2.spotlightTitle, div.hlWrap h1.hlTitle, div.wSpec-item h4.wSpec-title",
+              "returnArray": true
+            },
+            {
+              "key": "link_populer",
+              "cssSelector": "a[data-index]",
+              "returnValue": "attribute",
+              "attribute": "href",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        848,
+        0
+      ],
+      "id": "ff1cabcc-9ff8-46e0-a34f-31a41680b2db",
+      "name": "HTML"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mengambil semua data dari node HTML\nconst htmlData = items[0].json;\n\n// Buat array kosong untuk menampung semua judul dan link\nlet allTitles = [];\nlet allLinks = [];\n\n// Loop untuk mengambil semua judul dari berbagai field\nfor (const key in htmlData) {\n  if (key.includes('judul')) {\n    allTitles = allTitles.concat(htmlData[key]);\n  }\n}\n\n// Loop untuk mengambil semua link dari berbagai field\nfor (const key in htmlData) {\n  if (key.includes('link')) {\n    allLinks = allLinks.concat(htmlData[key]);\n  }\n}\n\nconst beritaLengkap = [];\n\n// Mencoba memasangkan judul dengan link yang paling cocok\nallTitles.forEach(judul => {\n  let matchedLink = '';\n  // Ambil beberapa kata dari judul untuk dicocokkan dengan URL\n  const searchTerms = judul.toLowerCase().split(' ').slice(0, 5);\n\n  for (let i = 0; i < allLinks.length; i++) {\n    const link = allLinks[i].toLowerCase();\n    let matchCount = 0;\n\n    searchTerms.forEach(term => {\n      if (link.includes(term) && term.length > 3) {\n        matchCount++;\n      }\n    });\n\n    // Jika ada kecocokan yang kuat, ambil linknya\n    if (matchCount > 2) {\n      matchedLink = allLinks[i];\n      // Hapus link yang sudah digunakan agar tidak terpakai lagi\n      allLinks.splice(i, 1);\n      break;\n    }\n  }\n\n  // Tambahkan pasangan judul dan link ke array final\n  beritaLengkap.push({\n    judul: judul.replace(/(\\r\\n|\\n|\\r)/gm, \"\"),\n    link: matchedLink\n  });\n});\n\n// --- BAGIAN TAMBAHAN UNTUK MENGACAK DATA ---\n// Mengacak urutan array beritaLengkap\nfor (let i = beritaLengkap.length - 1; i > 0; i--) {\n  const j = Math.floor(Math.random() * (i + 1));\n  [beritaLengkap[i], beritaLengkap[j]] = [beritaLengkap[j], beritaLengkap[i]];\n}\n\n// Hanya ambil 3 item teratas dari array yang sudah diacak\nconst top3Berita = beritaLengkap.slice(0, 3);\n// --- AKHIR BAGIAN TAMBAHAN ---\n\n// Ganti output dengan data baru yang sudah diacak dan rapi\nitems[0].json.beritaLengkap = top3Berita;\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        0
+      ],
+      "id": "9e9a5731-6b4f-4d7c-8492-06e6e9eaea98",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "chatId": "1905266981",
+        "text": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "d008fb18-1fae-406b-8207-af7bdac3f648",
+      "name": "Send a text message",
+      "webhookId": "3df6fa10-8ba8-4016-b09c-360dbcf2ca6e",
+      "credentials": {
+        "telegramApi": {
+          "id": "4ypjGEqWxUCZ3eqS",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        464,
+        0
+      ],
+      "id": "6a33a2f4-b35c-4e7b-8929-8c9210a4bea4",
+      "name": "Telegram Trigger",
+      "webhookId": "27890bea-bd40-48d0-9a6e-8ea7bf30e904",
+      "credentials": {
+        "telegramApi": {
+          "id": "4ypjGEqWxUCZ3eqS",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.beritaLengkap }}",
+        "options": {
+          "systemMessage": "Kamu adalah seorang asisten berita yang ramah dan menggunakan bahasa gaul.\n\nTugasmu adalah:\n1.  Menganalisis data berita yang diberikan dalam format JSON. Setiap item berita dijamin memiliki 'judul' dan 'link_berita'.\n2.  Pilih 3 berita yang paling relevan atau terbaru dari data yang kamu terima.\n3.  Ubah 3 data berita tersebut menjadi format yang rapi dan mudah dibaca, mirip dengan contoh ini:\n\nBerikut adalah rangkuman berita terbaru:\n\n1. [judul berita]\nLink: [link berita]\n\n2. [judul berita]\nLink: [link berita]\n\n3. [judul berita]\nLink: [link berita]\n\n4.  Jika pengguna meminta kategori tertentu dan kamu tidak menemukan berita yang relevan atau jumlahnya kurang dari 3, jawab dengan ramah. Contoh: \"Duh, sorry banget nih gengs, data buat kategori {kategori} lagi kosong. Mungkin bisa cobain kategori lain dulu? Aku standby kok!\"\n5.  Akhiri setiap respons berita dengan kalimat \"Terimakasih!\"."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1232,
+        0
+      ],
+      "id": "77ea9e71-60bd-4a4a-b3a8-fe55e708ffe9",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1232,
+        192
+      ],
+      "id": "a5109a7d-e552-4337-86a9-4da93651e632",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ltpa52p4EpnEBY7L",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9c17f669-3ced-4a40-9bb5-082e315d1e95",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b64c08fdf1559bde5e108a8ae6401f836a9812fa5cc3a64aaae0ef38de55e6de"
+  },
+  "id": "96NVaUWCF9aqQaus",
+  "tags": []
+}
